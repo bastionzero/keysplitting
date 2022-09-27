@@ -12,8 +12,15 @@ import (
 	"math/big"
 )
 
+var (
+	bigZero = big.NewInt(0)
+	bigOne  = big.NewInt(1)
+)
+
 // FIXME: probably a better way to initialize big ints
 // e.g. new(big.Int).SetBytes(em)
+// and is there a better way to chain operations?
+// seems like best practice is to split to multiple lines
 
 type SplitBy int
 
@@ -22,10 +29,6 @@ const (
 	Multiplication
 
 	maxShards = 16
-)
-
-var (
-	one = big.NewInt(1)
 )
 
 // SplitD returns k shards that together compose priv.D
@@ -52,7 +55,10 @@ func SignFirst(random io.Reader, shard *big.Int, hash crypto.Hash, hashed []byte
 		PublicKey: *pub,
 		D:         shard,
 	}
-	return rsa.SignPKCS1v15(random, priv, hash, hashed)
+	// TODO: revisit name
+	sig, err := signPKCS1v15(random, priv, hash, hashed)
+	fmt.Printf("Signed: %x\n", sig)
+	return sig, err
 }
 
 // NextSign uses the given key shard to sign a partially-signed message
@@ -67,6 +73,8 @@ func SignNext(random io.Reader, shard *big.Int, hash crypto.Hash, hashed []byte,
 			nextInt := new(big.Int).SetBytes(nextSig)
 			partialInt := new(big.Int).SetBytes(partialSig)
 			sigNext := new(big.Int).Mul(nextInt, partialInt)
+			sigNext.Mod(sigNext, pub.N)
+			fmt.Printf("partial: %v\nnext: %v\nsig: %v", partialInt, nextInt, sigNext)
 			return sigNext.Bytes(), nil
 		}
 	default:
@@ -82,16 +90,16 @@ func phi(primes []*big.Int) *big.Int {
 	z1 := big.NewInt(0)
 	z2 := big.NewInt(0)
 
-	z1.Sub(primes[0], one)
+	z1.Sub(primes[0], bigOne)
 
 	// primes is guaranteed to have size >= 2
 	// phi <- (p_0 - 1) * (p_1 - 1)
-	phi := new(big.Int).Mul(z1.Sub(primes[0], one), z2.Sub(primes[1], one))
+	phi := new(big.Int).Mul(z1.Sub(primes[0], bigOne), z2.Sub(primes[1], bigOne))
 
 	// multiply any additional primes
 	for i := 2; i < len(primes); i++ {
 		// phi_i <- phi_(i-1) * (p_i - 1)
-		phi.Mul(phi, z1.Sub(primes[i], one))
+		phi.Mul(phi, z1.Sub(primes[i], bigOne))
 	}
 
 	return phi
@@ -134,8 +142,8 @@ func splitMultiplicative(priv *rsa.PrivateKey, k int, phi *big.Int) ([]*big.Int,
 		// FIXME: necessary?
 		z1 := big.NewInt(0)
 		// s_2 <- d/s_1 mod phi
-		fmt.Printf("The things are:\nN: %v\ns2: %v\nD: %v\ns1: %v\none: %v\nphi: %v\n", priv.N, s2, priv.D, s1, one, phi)
-		z1.Exp(s1, one.Neg(one), phi)
+		fmt.Printf("The things are:\nN: %v\ns2: %v\nD: %v\ns1: %v\none: %v\nphi: %v\n", priv.N, s2, priv.D, s1, bigOne, phi)
+		z1.Exp(s1, bigOne.Neg(bigOne), phi)
 		fmt.Printf("z1: %v\n", z1)
 
 		s2.Mul(priv.D, z1)
