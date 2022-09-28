@@ -96,12 +96,6 @@ var _ = Describe("MpcRsa", func() {
 					Expect(congruentModN(sum, priv.D, phi)).To(BeTrue(), fmt.Sprintf("%v ≢ %v (mod %v)", sum, priv.D, phi))
 				})
 
-				It("Produces keys whose product is congruent to the original key mod phi(N)", func() {
-					product := shardProduct(shards)
-					phi := phi(priv.Primes)
-					Expect(congruentModN(product, priv.D, phi)).To(BeTrue(), fmt.Sprintf("%v ≢ %v (mod %v)", product, priv.D, phi))
-				})
-
 				It("Produces a valid split signature", func() {
 					// this randomization demonstrates that the order of signing doesn't matter
 					shuffleShards(shards)
@@ -141,6 +135,12 @@ var _ = Describe("MpcRsa", func() {
 					Expect(err).To(BeNil(), fmt.Sprintf("failed to split RSA key into %d shards: %s", j, err))
 				})
 
+				It("Produces keys whose product is congruent to the original key mod phi(N)", func() {
+					product := shardProduct(shards)
+					phi := phi(priv.Primes)
+					Expect(congruentModN(product, priv.D, phi)).To(BeTrue(), fmt.Sprintf("%v ≢ %v (mod %v)", product, priv.D, phi))
+				})
+
 				It("Produces a valid split signature", func() {
 
 					// this randomization demonstrates that the order of signing doesn't matter
@@ -163,4 +163,6 @@ var _ = Describe("MpcRsa", func() {
 			})
 		}
 	})
+
+	// TODO: test multi-prime key
 })
