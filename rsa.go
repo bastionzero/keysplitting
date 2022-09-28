@@ -1,16 +1,16 @@
 // Copyright 2009 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
+//
+// This code is lifted from the Go stdlib crypto/rsa. We would have preferred to use those methods directly
+// but had to remove some aspects of the Sign function that are incompatible with partial keys
 
 package mpcrsa
 
 import (
 	"crypto"
-	"crypto/rand"
 	"crypto/rsa"
-	"crypto/subtle"
 	"errors"
-	"fmt"
 	"io"
 	"math/big"
 )
@@ -98,7 +98,7 @@ func pkcs1v15HashInfo(hash crypto.Hash, inLen int) (hashLen int, prefix []byte, 
 }
 
 // decrypt performs an RSA decryption, resulting in a plaintext integer. If a
-// random source is given, RSA blinding is used.
+// random source is given, RSA blinding is used. [FIXME: currently not true]
 func decrypt(random io.Reader, priv *rsa.PrivateKey, c *big.Int) (m *big.Int, err error) {
 
 	// TODO(agl): can we get away with reusing blinds?
@@ -110,102 +110,13 @@ func decrypt(random io.Reader, priv *rsa.PrivateKey, c *big.Int) (m *big.Int, er
 		return nil, rsa.ErrDecryption
 	}
 
-	var ir *big.Int
-	// FIXME: we probably need to add blinding back in, but for now it doesn't work with split keys
-	// probably broken because the D/E relationship does not hold for shards
-	if random == nil {
-
-		// Blinding enabled. Blinding involves multiplying c by r^e.
-		// Then the decryption operation performs (m^e * r^e)^d mod n
-		// which equals mr mod n. The factor of r can then be removed
-		// by multiplying by the multiplicative inverse of r.
-
-		var r *big.Int
-		ir = new(big.Int)
-		for {
-			r, err = rand.Int(random, priv.N)
-			if err != nil {
-				return
-			}
-			if r.Cmp(bigZero) == 0 {
-				r = bigOne
-			}
-			ok := ir.ModInverse(r, priv.N)
-			if ok != nil {
-				break
-			}
-		}
-		bigE := big.NewInt(int64(priv.E))
-		rpowe := new(big.Int).Exp(r, bigE, priv.N) // N != 0
-		cCopy := new(big.Int).Set(c)
-		cCopy.Mul(cCopy, rpowe)
-		cCopy.Mod(cCopy, priv.N)
-		m = new(big.Int).Exp(cCopy, priv.D, priv.N)
-	}
+	/*****************************************************************************************************
+	 *	FIXME: we probably need some form of blinding here, but for now it doesn't work with split keys, *
+	 *	probably because the D/E relationship does not hold for shards. Still, there are other ways of   *
+	 *	defending against side-channel attacks                                                           *
+	 *****************************************************************************************************/
 
 	m = new(big.Int).Exp(c, priv.D, priv.N)
 
-	if ir != nil {
-		// Unblind
-		m.Mul(m, ir)
-		m.Mod(m, priv.N)
-	}
-
 	return
-}
-
-// TODO: depcrated, but useful for debugging tests
-func verifyPKCS1v15(pub *rsa.PublicKey, hash crypto.Hash, hashed []byte, sig []byte) error {
-
-	hashLen, prefix, err := pkcs1v15HashInfo(hash, len(hashed))
-	if err != nil {
-		return err
-	}
-
-	tLen := len(prefix) + hashLen
-	k := pub.Size()
-	if k < tLen+11 {
-		return rsa.ErrVerification
-	}
-
-	// RFC 8017 Section 8.2.2: If the length of the signature S is not k
-	// octets (where k is the length in octets of the RSA modulus n), output
-	// "invalid signature" and stop.
-	if k != len(sig) {
-		return rsa.ErrVerification
-	}
-
-	c := new(big.Int).SetBytes(sig)
-	m := encrypt(new(big.Int), pub, c)
-	em := m.FillBytes(make([]byte, k))
-	// EM = 0x00 || 0x01 || PS || 0x00 || T
-	fmt.Printf("what got verified -> %x\n", em)
-
-	ok := subtle.ConstantTimeByteEq(em[0], 0)
-	fmt.Printf("1. %d\n", ok)
-	ok &= subtle.ConstantTimeByteEq(em[1], 1)
-	fmt.Printf("2. %d\n", ok)
-	ok &= subtle.ConstantTimeCompare(em[k-hashLen:k], hashed)
-	fmt.Printf("3. %d\n", ok)
-	ok &= subtle.ConstantTimeCompare(em[k-tLen:k-hashLen], prefix)
-	fmt.Printf("4. %d\n", ok)
-	ok &= subtle.ConstantTimeByteEq(em[k-tLen-1], 0)
-	fmt.Printf("5. %d\n", ok)
-
-	for i := 2; i < k-tLen-1; i++ {
-		ok &= subtle.ConstantTimeByteEq(em[i], 0xff)
-		fmt.Printf("6-%d. %d\n", i, ok)
-	}
-
-	if ok != 1 {
-		return rsa.ErrVerification
-	}
-
-	return nil
-}
-
-func encrypt(c *big.Int, pub *rsa.PublicKey, m *big.Int) *big.Int {
-	e := big.NewInt(int64(pub.E))
-	c.Exp(m, e, pub.N)
-	return c
 }

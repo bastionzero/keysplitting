@@ -40,6 +40,55 @@ func shardProduct(shards []*big.Int) *big.Int {
 	return result
 }
 
+func runTest(priv *rsa.PrivateKey, i int, hashed []byte, splitBy SplitBy) {
+	var shards []*big.Int
+	var err error
+	var label string
+	switch splitBy {
+	case Multiplication:
+		label = "product"
+	case Addition:
+		label = "sum"
+	}
+
+	It("Successfully splits the key", func() {
+		shards, err = SplitD(priv, i, splitBy)
+		Expect(err).To(BeNil(), fmt.Sprintf("failed to split RSA key into %d shards: %s", i, err))
+	})
+
+	It(fmt.Sprintf("Produces keys whose %s is congruent to the original key mod phi(N)", label), func() {
+		phi := eulerTotient(priv.Primes)
+
+		switch splitBy {
+		case Multiplication:
+			product := shardProduct(shards)
+			Expect(congruentModN(product, priv.D, phi)).To(BeTrue(), fmt.Sprintf("%v ≢ %v (mod %v)", product, priv.D, phi))
+		case Addition:
+			sum := shardSum(shards)
+			Expect(congruentModN(sum, priv.D, phi)).To(BeTrue(), fmt.Sprintf("%v ≢ %v (mod %v)", sum, priv.D, phi))
+		}
+	})
+
+	It("Produces a valid split signature", func() {
+		// this randomization demonstrates that the order of signing doesn't matter
+		shuffleShards(shards)
+
+		sig1, err := SignFirst(rand.Reader, shards[0], crypto.SHA512, hashed, &priv.PublicKey)
+		Expect(err).To(BeNil(), fmt.Sprintf("failed to generate first signature: %s", err))
+
+		// simulate each party iteratively adding their signature
+		sigNext := sig1
+		for k := 1; k < len(shards); k++ {
+			sigNext, err = SignNext(rand.Reader, shards[k], crypto.SHA512, hashed, &priv.PublicKey, splitBy, sigNext)
+			Expect(err).To(BeNil(), fmt.Sprintf("failed to generate signature #%d: %s", k, err))
+		}
+
+		// verify once all parties have signed
+		err = rsa.VerifyPKCS1v15(&priv.PublicKey, crypto.SHA512, hashed, sigNext)
+		Expect(err).To(BeNil(), fmt.Sprintf("failed to verify signature: %s", err))
+	})
+}
+
 // TODO: I mean obviously this should say TestKeySplitting
 func TestMpcRsa(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -73,96 +122,35 @@ var _ = Describe("MpcRsa", func() {
 		})
 	})
 
-	Context("Splitting keys additively", func() {
-		priv, _ := rsa.GenerateKey(rand.Reader, keyLength)
-
-		for i := 2; i <= maxShards; i++ {
-			When(fmt.Sprintf("Splitting a key %d ways", i), Ordered, func() {
-				// because this container is Ordered, Ginkgo first iterates through the values of i and compiles the nodes.
-				// Therefore we need to assign i's value to a local variable
-				j := i
-
-				var shards []*big.Int
-				var err error
-
-				It("Successfully splits the key", func() {
-					shards, err = SplitD(priv, j, Addition)
-					Expect(err).To(BeNil(), fmt.Sprintf("failed to split RSA key into %d shards: %s", j, err))
-				})
-
-				It("Produces keys whose sum is congruent to the original key mod phi(N)", func() {
-					sum := shardSum(shards)
-					phi := phi(priv.Primes)
-					Expect(congruentModN(sum, priv.D, phi)).To(BeTrue(), fmt.Sprintf("%v ≢ %v (mod %v)", sum, priv.D, phi))
-				})
-
-				It("Produces a valid split signature", func() {
-					// this randomization demonstrates that the order of signing doesn't matter
-					shuffleShards(shards)
-
-					sig1, err := SignFirst(rand.Reader, shards[0], crypto.SHA512, hashed, &priv.PublicKey)
-					Expect(err).To(BeNil(), fmt.Sprintf("failed to generate first signature: %s", err))
-
-					// simulate each party iteratively adding their signature
-					sigNext := sig1
-					for k := 1; k < len(shards); k++ {
-						sigNext, err = SignNext(rand.Reader, shards[k], crypto.SHA512, hashed, &priv.PublicKey, Addition, sigNext)
-						Expect(err).To(BeNil(), fmt.Sprintf("failed to generate signature #%d: %s", k, err))
-					}
-
-					// verify once all parties have signed
-					err = rsa.VerifyPKCS1v15(&priv.PublicKey, crypto.SHA512, hashed, sigNext)
-					Expect(err).To(BeNil(), fmt.Sprintf("failed to verify signature: %s", err))
-				})
-			})
-		}
-	})
-
 	Context("Splitting keys multiplicatively", func() {
 		priv, _ := rsa.GenerateKey(rand.Reader, keyLength)
 
 		for i := 2; i <= maxShards; i++ {
 			When(fmt.Sprintf("Splitting a key %d ways", i), Ordered, func() {
-				// because this container is Ordered, Ginkgo first iterates through the values of i and compiles the nodes.
-				// Therefore we need to assign i's value to a local variable
-				j := i
-
-				var shards []*big.Int
-				var err error
-
-				It("Successfully splits the key", func() {
-					shards, err = SplitD(priv, j, Multiplication)
-					Expect(err).To(BeNil(), fmt.Sprintf("failed to split RSA key into %d shards: %s", j, err))
-				})
-
-				It("Produces keys whose product is congruent to the original key mod phi(N)", func() {
-					product := shardProduct(shards)
-					phi := phi(priv.Primes)
-					Expect(congruentModN(product, priv.D, phi)).To(BeTrue(), fmt.Sprintf("%v ≢ %v (mod %v)", product, priv.D, phi))
-				})
-
-				It("Produces a valid split signature", func() {
-
-					// this randomization demonstrates that the order of signing doesn't matter
-					shuffleShards(shards)
-
-					sig1, err := SignFirst(rand.Reader, shards[0], crypto.SHA512, hashed, &priv.PublicKey)
-					Expect(err).To(BeNil(), fmt.Sprintf("failed to generate first signature: %s", err))
-
-					// simulate each party iteratively adding their signature
-					sigNext := sig1
-					for i := 1; i < len(shards); i++ {
-						sigNext, err = SignNext(rand.Reader, shards[i], crypto.SHA512, hashed, &priv.PublicKey, Multiplication, sigNext)
-						Expect(err).To(BeNil(), fmt.Sprintf("failed to generate signature #%d: %s", i, err))
-					}
-
-					// verify once all parties have signed
-					err = rsa.VerifyPKCS1v15(&priv.PublicKey, crypto.SHA512, hashed, sigNext)
-					Expect(err).To(BeNil(), fmt.Sprintf("failed to verify signature: %s", err))
-				})
+				runTest(priv, i, hashed, Multiplication)
 			})
 		}
 	})
 
-	// TODO: test multi-prime key
+	Context("Splitting keys additively", func() {
+		priv, _ := rsa.GenerateKey(rand.Reader, keyLength)
+		for i := 2; i <= maxShards; i++ {
+			When(fmt.Sprintf("Splitting a key %d ways", i), func() {
+				runTest(priv, i, hashed, Addition)
+			})
+		}
+	})
+
+	// we don't expect multi-prime keys to be heavily used but we should make sure they can be split just like everybody else
+	Context("Multi-prime keys", func() {
+		When("Using a 4096-bit / 3-prime key split 5 ways additively", func() {
+			priv, _ := rsa.GenerateMultiPrimeKey(rand.Reader, 3, keyLength*2)
+			runTest(priv, 5, hashed, Addition)
+		})
+
+		When("Using a 8192-bit / 5-prime key split 3 ways multiplicatively", func() {
+			priv, _ := rsa.GenerateMultiPrimeKey(rand.Reader, 5, keyLength*4)
+			runTest(priv, 5, hashed, Addition)
+		})
+	})
 })

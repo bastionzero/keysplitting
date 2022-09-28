@@ -37,3 +37,19 @@ var _ = Describe("MpcRsa congruence", func() {
 		})
 	})
 })
+
+var _ = Describe("MpcRsa Euler totient", func() {
+	Context("Small numbers", func() {
+		It("Correctly gives phi(77837) == 77280", func() {
+			// let p = 277 and q = 281. Then n = 77837
+			phi := eulerTotient([]*big.Int{big.NewInt(277), big.NewInt(281)})
+			Expect(phi.Cmp(big.NewInt(77280))).To(Equal(0), "Incorrect result: 2 ≡ 23 (mod 7)")
+		})
+
+		It("Correctly gives phi(9191070797) == 9125222400", func() {
+			// let our primes equal 277, 281, and 118081. Then n = 9191070797
+			phi := eulerTotient([]*big.Int{big.NewInt(277), big.NewInt(281), big.NewInt(118081)})
+			Expect(phi.Cmp(big.NewInt(9125222400))).To(Equal(0), "Incorrect result: 2 ≡ 23 (mod 7)")
+		})
+	})
+})
