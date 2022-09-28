@@ -18,6 +18,7 @@ var (
 )
 
 // FIXME: probably a better way to initialize big ints
+// FIXME: cCopy := new(big.Int).Set(c)
 // e.g. new(big.Int).SetBytes(em)
 // and is there a better way to chain operations?
 // seems like best practice is to split to multiple lines
@@ -33,8 +34,8 @@ const (
 
 // SplitD returns k shards that together compose priv.D
 func SplitD(priv *rsa.PrivateKey, k int, splitBy SplitBy) ([]*big.Int, error) {
-	if k > maxShards {
-		return nil, fmt.Errorf("cannot split key into %d shards. Maximum is %d", k, maxShards)
+	if k > maxShards || k < 2 {
+		return nil, fmt.Errorf("cannot split key into %d shards. 2 <= k <= %d", k, maxShards)
 	}
 
 	phi := phi(priv.Primes)
@@ -56,9 +57,7 @@ func SignFirst(random io.Reader, shard *big.Int, hash crypto.Hash, hashed []byte
 		D:         shard,
 	}
 	// TODO: revisit name
-	sig, err := signPKCS1v15(random, priv, hash, hashed)
-	fmt.Printf("Signed: %x\n", sig)
-	return sig, err
+	return signPKCS1v15(random, priv, hash, hashed)
 }
 
 // NextSign uses the given key shard to sign a partially-signed message
@@ -74,7 +73,6 @@ func SignNext(random io.Reader, shard *big.Int, hash crypto.Hash, hashed []byte,
 			partialInt := new(big.Int).SetBytes(partialSig)
 			sigNext := new(big.Int).Mul(nextInt, partialInt)
 			sigNext.Mod(sigNext, pub.N)
-			fmt.Printf("partial: %v\nnext: %v\nsig: %v", partialInt, nextInt, sigNext)
 			return sigNext.Bytes(), nil
 		}
 	default:
@@ -153,13 +151,11 @@ func splitMultiplicative(priv *rsa.PrivateKey, k int, phi *big.Int) ([]*big.Int,
 }
 
 func splitAdditive(priv *rsa.PrivateKey, k int, phi *big.Int) ([]*big.Int, error) {
-	remainingD, err := copyBigInt(priv.D)
-	if err != nil {
-		return nil, err
-	}
+	remainingD := new(big.Int).Set(priv.D)
 
 	shards := make([]*big.Int, k)
 	var newShard *big.Int
+	var err error
 
 	for i := 0; i < k; i++ {
 		if i == k-1 {
@@ -194,12 +190,4 @@ func shardIn(shards []*big.Int, shard *big.Int) bool {
 		}
 	}
 	return false
-}
-
-func copyBigInt(x *big.Int) (*big.Int, error) {
-	if result, ok := new(big.Int).SetString(x.String(), 10); !ok {
-		return nil, fmt.Errorf("failed to copy invalid big.Int %v", x)
-	} else {
-		return result, nil
-	}
 }

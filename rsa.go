@@ -71,9 +71,7 @@ func signPKCS1v15(random io.Reader, priv *rsa.PrivateKey, hash crypto.Hash, hash
 	copy(em[k-hashLen:k], hashed)
 
 	m := new(big.Int).SetBytes(em)
-	fmt.Printf("what gets signed: %x\n", em)
 	c, err := decrypt(random, priv, m)
-	fmt.Printf("c = %v\n", c)
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +111,8 @@ func decrypt(random io.Reader, priv *rsa.PrivateKey, c *big.Int) (m *big.Int, er
 	}
 
 	var ir *big.Int
-	// FIXME: this should be !=... not even sure it's necessary though
+	// FIXME: we probably need to add blinding back in, but for now it doesn't work with split keys
+	// probably broken because the D/E relationship does not hold for shards
 	if random == nil {
 
 		// Blinding enabled. Blinding involves multiplying c by r^e.
@@ -141,13 +140,13 @@ func decrypt(random io.Reader, priv *rsa.PrivateKey, c *big.Int) (m *big.Int, er
 		cCopy := new(big.Int).Set(c)
 		cCopy.Mul(cCopy, rpowe)
 		cCopy.Mod(cCopy, priv.N)
-		c = cCopy
+		m = new(big.Int).Exp(cCopy, priv.D, priv.N)
 	}
 
 	m = new(big.Int).Exp(c, priv.D, priv.N)
 
 	if ir != nil {
-		// Unblind.
+		// Unblind
 		m.Mul(m, ir)
 		m.Mod(m, priv.N)
 	}
@@ -155,6 +154,7 @@ func decrypt(random io.Reader, priv *rsa.PrivateKey, c *big.Int) (m *big.Int, er
 	return
 }
 
+// TODO: depcrated, but useful for debugging tests
 func verifyPKCS1v15(pub *rsa.PublicKey, hash crypto.Hash, hashed []byte, sig []byte) error {
 
 	hashLen, prefix, err := pkcs1v15HashInfo(hash, len(hashed))
