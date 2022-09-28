@@ -9,6 +9,7 @@ import (
 	"math/big"
 	mrand "math/rand"
 	"testing"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -16,6 +17,7 @@ import (
 
 // randomize order of shards
 func shuffleShards(shards []*big.Int) {
+	mrand.Seed(int64(time.Now().UnixMicro()))
 	for i := range shards {
 		j := mrand.Intn(i + 1)
 		shards[i], shards[j] = shards[j], shards[i]
@@ -72,14 +74,21 @@ var _ = Describe("MpcRsa", func() {
 	})
 
 	Context("Splitting keys additively", func() {
-		priv, err := rsa.GenerateKey(rand.Reader, keyLength)
-		Expect(err).To(BeNil(), fmt.Sprintf("failed to generate %d-bit RSA key: %s", keyLength, err))
+		priv, _ := rsa.GenerateKey(rand.Reader, keyLength)
 
 		for i := 2; i <= maxShards; i++ {
-			When(fmt.Sprintf("Splitting a key %d ways", i), func() {
+			When(fmt.Sprintf("Splitting a key %d ways", i), Ordered, func() {
+				// because this container is Ordered, Ginkgo first iterates through the values of i and compiles the nodes.
+				// Therefore we need to assign i's value to a local variable
+				j := i
 
-				shards, err := SplitD(priv, i, Addition)
-				Expect(err).To(BeNil(), fmt.Sprintf("failed to split RSA key into %d shards: %s", i, err))
+				var shards []*big.Int
+				var err error
+
+				It("Successfully splits the key", func() {
+					shards, err = SplitD(priv, j, Addition)
+					Expect(err).To(BeNil(), fmt.Sprintf("failed to split RSA key into %d shards: %s", j, err))
+				})
 
 				It("Produces keys whose sum is congruent to the original key mod phi(N)", func() {
 					sum := shardSum(shards)
@@ -87,18 +96,24 @@ var _ = Describe("MpcRsa", func() {
 					Expect(congruentModN(sum, priv.D, phi)).To(BeTrue(), fmt.Sprintf("%v ≢ %v (mod %v)", sum, priv.D, phi))
 				})
 
-				It("Produces a valid split signature", func() {
-					sig1, err := SignFirst(rand.Reader, shards[0], crypto.SHA512, hashed, &priv.PublicKey)
-					Expect(err).To(BeNil(), fmt.Sprintf("failed to generate first signature: %s", err))
+				It("Produces keys whose product is congruent to the original key mod phi(N)", func() {
+					product := shardProduct(shards)
+					phi := phi(priv.Primes)
+					Expect(congruentModN(product, priv.D, phi)).To(BeTrue(), fmt.Sprintf("%v ≢ %v (mod %v)", product, priv.D, phi))
+				})
 
+				It("Produces a valid split signature", func() {
 					// this randomization demonstrates that the order of signing doesn't matter
 					shuffleShards(shards)
 
+					sig1, err := SignFirst(rand.Reader, shards[0], crypto.SHA512, hashed, &priv.PublicKey)
+					Expect(err).To(BeNil(), fmt.Sprintf("failed to generate first signature: %s", err))
+
 					// simulate each party iteratively adding their signature
 					sigNext := sig1
-					for i := 1; i < len(shards); i++ {
-						sigNext, err = SignNext(rand.Reader, shards[i], crypto.SHA512, hashed, &priv.PublicKey, Addition, sigNext)
-						Expect(err).To(BeNil(), fmt.Sprintf("failed to generate signature #%d: %s", i, err))
+					for k := 1; k < len(shards); k++ {
+						sigNext, err = SignNext(rand.Reader, shards[k], crypto.SHA512, hashed, &priv.PublicKey, Addition, sigNext)
+						Expect(err).To(BeNil(), fmt.Sprintf("failed to generate signature #%d: %s", k, err))
 					}
 
 					// verify once all parties have signed
@@ -110,27 +125,29 @@ var _ = Describe("MpcRsa", func() {
 	})
 
 	Context("Splitting keys multiplicatively", func() {
-		priv, err := rsa.GenerateKey(rand.Reader, keyLength)
-		Expect(err).To(BeNil(), fmt.Sprintf("failed to generate %d-bit RSA key: %s", keyLength, err))
+		priv, _ := rsa.GenerateKey(rand.Reader, keyLength)
 
 		for i := 2; i <= maxShards; i++ {
-			When(fmt.Sprintf("Splitting a key %d ways", i), func() {
+			When(fmt.Sprintf("Splitting a key %d ways", i), Ordered, func() {
+				// because this container is Ordered, Ginkgo first iterates through the values of i and compiles the nodes.
+				// Therefore we need to assign i's value to a local variable
+				j := i
 
-				shards, err := SplitD(priv, i, Multiplication)
-				Expect(err).To(BeNil(), fmt.Sprintf("failed to split RSA key into %d shards: %s", i, err))
+				var shards []*big.Int
+				var err error
 
-				It("Produces keys whose product is congruent to the original key mod phi(N)", func() {
-					product := shardProduct(shards)
-					phi := phi(priv.Primes)
-					Expect(congruentModN(product, priv.D, phi)).To(BeTrue(), fmt.Sprintf("%v ≢ %v (mod %v)", product, priv.D, phi))
+				It("Successfully splits the key", func() {
+					shards, err = SplitD(priv, j, Multiplication)
+					Expect(err).To(BeNil(), fmt.Sprintf("failed to split RSA key into %d shards: %s", j, err))
 				})
 
 				It("Produces a valid split signature", func() {
-					sig1, err := SignFirst(rand.Reader, shards[0], crypto.SHA512, hashed, &priv.PublicKey)
-					Expect(err).To(BeNil(), fmt.Sprintf("failed to generate first signature: %s", err))
 
 					// this randomization demonstrates that the order of signing doesn't matter
 					shuffleShards(shards)
+
+					sig1, err := SignFirst(rand.Reader, shards[0], crypto.SHA512, hashed, &priv.PublicKey)
+					Expect(err).To(BeNil(), fmt.Sprintf("failed to generate first signature: %s", err))
 
 					// simulate each party iteratively adding their signature
 					sigNext := sig1

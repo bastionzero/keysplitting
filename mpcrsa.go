@@ -36,6 +36,8 @@ const (
 func SplitD(priv *rsa.PrivateKey, k int, splitBy SplitBy) ([]*big.Int, error) {
 	if k > maxShards || k < 2 {
 		return nil, fmt.Errorf("cannot split key into %d shards. 2 <= k <= %d", k, maxShards)
+	} else if priv == nil {
+		return nil, fmt.Errorf("cannot split a nil key")
 	}
 
 	phi := phi(priv.Primes)
