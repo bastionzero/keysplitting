@@ -1,7 +1,9 @@
 /*
 Package mpcrsa implements primitives for multi-party RSA signatures using Go's crypto/rsa library
 
-informed by: https://eprint.iacr.org/2001/060.pdf
+informed by:
+
+	[1] https://eprint.iacr.org/2001/060.pdf
 */
 package mpcrsa
 
@@ -36,6 +38,13 @@ const (
 )
 
 // SplitD returns k shards that together compose priv.D
+//
+// If SplitBy.Multiplication, the shards will be such that s1 * s2 * ... * sk ≡ D (mod phi(N))
+//
+// If SplitBy.Addition, the shards will be such that s1 + s2 + ... + sk ≡ D (mod phi(N))
+//
+// "Either type of split lends itself equally well to two-party based signing," [1] but they are not interoperable.
+// Whichever SplitBy method you use with SplitD, you must use the same method when running SignNext
 func SplitD(priv *rsa.PrivateKey, k int, splitBy SplitBy) ([]*big.Int, error) {
 	if k > maxShards || k < 2 {
 		return nil, fmt.Errorf("cannot split key into %d shards. 2 <= k <= %d", k, maxShards)
@@ -175,7 +184,7 @@ func shardIn(shards []*big.Int, shard *big.Int) bool {
 	return false
 }
 
-// FirstSign uses the given key shard to perform the initial signature on a hashed message.
+// SignFirst uses the given key shard to perform the initial signature on a hashed message.
 // Note that hashed must be the result of hashing the input message using the given hash function
 func SignFirst(random io.Reader, shard *big.Int, hashFn crypto.Hash, hashed []byte, pub *rsa.PublicKey) ([]byte, error) {
 	priv := &rsa.PrivateKey{
@@ -186,9 +195,10 @@ func SignFirst(random io.Reader, shard *big.Int, hashFn crypto.Hash, hashed []by
 	return signPKCS1v15(random, priv, hashFn, hashed)
 }
 
-// NextSign uses the given key shard to sign a partially-signed message
+// SignNext uses the given key shard to sign a partially-signed message
 //
 // If SplitBy.Multiplication, nextSig(H) <- partialSig(H)^shard (mod N), i.e. a chain of exponentiation
+//
 // If SplitBy.Addition, nextSig(H) <- partialSig(H) * H^shard (mod N), i.e. a chain of multiplication
 //
 // Note that hashed must be the result of hashing the input message using the given hash function.
