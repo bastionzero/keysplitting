@@ -40,9 +40,11 @@ func shardProduct(shards []*big.Int) *big.Int {
 	return result
 }
 
+// run a full workflow of splitting a key and using the shards to sign a message
 func runTest(priv *rsa.PrivateKey, i int, hashed []byte, splitBy SplitBy) {
 	var shards []*big.Int
 	var err error
+
 	var label string
 	switch splitBy {
 	case Multiplication:
@@ -73,6 +75,7 @@ func runTest(priv *rsa.PrivateKey, i int, hashed []byte, splitBy SplitBy) {
 		// this randomization demonstrates that the order of signing doesn't matter
 		shuffleShards(shards)
 
+		// although the overall order doesn't matter, someone has to make the first signature
 		sig1, err := SignFirst(rand.Reader, shards[0], crypto.SHA512, hashed, &priv.PublicKey)
 		Expect(err).To(BeNil(), fmt.Sprintf("failed to generate first signature: %s", err))
 

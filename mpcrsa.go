@@ -21,11 +21,13 @@ var (
 	bigOne  = big.NewInt(1)
 )
 
+// SplitBy determines the algorithm used to split the private key and combine partial signatures.
+// Either algorithm is suitable from a performance and security standpoint
 type SplitBy int
 
 const (
-	Addition SplitBy = iota
-	Multiplication
+	Multiplication SplitBy = iota
+	Addition
 
 	// TODO: this is an arbitrary number.
 	// Obviously splitting takes a litle longer with at higher values of k,
@@ -39,12 +41,12 @@ const (
 
 // SplitD returns k shards that together compose priv.D
 //
-// If SplitBy.Multiplication, the shards will be such that s1 * s2 * ... * sk ≡ D (mod phi(N))
+// If [SplitBy].Multiplication is used, the shards will be such that s1 * s2 * ... * sk ≡ D (mod phi(N))
 //
-// If SplitBy.Addition, the shards will be such that s1 + s2 + ... + sk ≡ D (mod phi(N))
+// If [SplitBy].Addition is used, the shards will be such that s1 + s2 + ... + sk ≡ D (mod phi(N))
 //
 // "Either type of split lends itself equally well to two-party based signing," [1] but they are not interoperable.
-// Whichever SplitBy method you use with SplitD, you must use the same method when running SignNext
+// Whichever SplitBy method you use with SplitD, you must use the same method when running [SignNext]
 func SplitD(priv *rsa.PrivateKey, k int, splitBy SplitBy) ([]*big.Int, error) {
 	if k > maxShards || k < 2 {
 		return nil, fmt.Errorf("cannot split key into %d shards. 2 <= k <= %d", k, maxShards)
@@ -197,9 +199,9 @@ func SignFirst(random io.Reader, shard *big.Int, hashFn crypto.Hash, hashed []by
 
 // SignNext uses the given key shard to sign a partially-signed message
 //
-// If SplitBy.Multiplication, nextSig(H) <- partialSig(H)^shard (mod N), i.e. a chain of exponentiation
+// If [SplitBy].Multiplication is used, nextSig(H) <- partialSig(H)^shard (mod N), i.e. a chain of exponentiation
 //
-// If SplitBy.Addition, nextSig(H) <- partialSig(H) * H^shard (mod N), i.e. a chain of multiplication
+// If [SplitBy].Addition is used, nextSig(H) <- partialSig(H) * H^shard (mod N), i.e. a chain of multiplication
 //
 // Note that hashed must be the result of hashing the input message using the given hash function.
 func SignNext(random io.Reader, shard *big.Int, hashFn crypto.Hash, hashed []byte, pub *rsa.PublicKey, splitBy SplitBy, partialSig []byte) ([]byte, error) {
