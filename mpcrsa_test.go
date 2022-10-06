@@ -1,4 +1,4 @@
-package mpcrsa
+package keysplitting
 
 import (
 	"crypto"
@@ -15,6 +15,8 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+const maxTestShards = 16
+
 // randomize order of shards
 func shuffleShards(shards []*big.Int) {
 	mrand.Seed(int64(time.Now().UnixMicro()))
@@ -22,14 +24,6 @@ func shuffleShards(shards []*big.Int) {
 		j := mrand.Intn(i + 1)
 		shards[i], shards[j] = shards[j], shards[i]
 	}
-}
-
-func shardSum(shards []*big.Int) *big.Int {
-	result := big.NewInt(0)
-	for _, s := range shards {
-		result.Add(result, s)
-	}
-	return result
 }
 
 func shardProduct(shards []*big.Int) *big.Int {
@@ -72,7 +66,7 @@ func runTest(priv *rsa.PrivateKey, i int, hashed []byte, splitBy SplitBy) {
 	})
 
 	It("Produces a valid split signature", func() {
-		// this randomization demonstrates that the order of signing doesn't matter
+		By("Shuffling the shards to demonstrate that the order of signatures doesn't matter")
 		shuffleShards(shards)
 
 		// although the overall order doesn't matter, someone has to make the first signature
@@ -92,13 +86,12 @@ func runTest(priv *rsa.PrivateKey, i int, hashed []byte, splitBy SplitBy) {
 	})
 }
 
-// TODO: I mean obviously this should say TestKeySplitting
-func TestMpcRsa(t *testing.T) {
+func TestKeysplitting(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "MpcRsa Suite")
+	RunSpecs(t, "Keysplitting Suite")
 }
 
-var _ = Describe("MpcRsa", func() {
+var _ = Describe("Keysplitting", func() {
 
 	keyLength := 2048
 	message := "TEST MESSAGE"
@@ -116,19 +109,12 @@ var _ = Describe("MpcRsa", func() {
 				Expect(err).NotTo(BeNil(), "Shouldn't be able to split a key into 1 shard")
 			})
 		})
-
-		When("Attempting to split a key into too many shards", func() {
-			It("Should fail", func() {
-				_, err := SplitD(priv, maxShards+1, Addition)
-				Expect(err).NotTo(BeNil(), fmt.Sprintf("Shouldn't be able to split a key %d ways", maxShards+1))
-			})
-		})
 	})
 
 	Context("Splitting keys multiplicatively", func() {
 		priv, _ := rsa.GenerateKey(rand.Reader, keyLength)
 
-		for i := 2; i <= maxShards; i++ {
+		for i := 2; i <= maxTestShards; i++ {
 			When(fmt.Sprintf("Splitting a key %d ways", i), Ordered, func() {
 				runTest(priv, i, hashed, Multiplication)
 			})
@@ -137,7 +123,7 @@ var _ = Describe("MpcRsa", func() {
 
 	Context("Splitting keys additively", func() {
 		priv, _ := rsa.GenerateKey(rand.Reader, keyLength)
-		for i := 2; i <= maxShards; i++ {
+		for i := 2; i <= maxTestShards; i++ {
 			When(fmt.Sprintf("Splitting a key %d ways", i), func() {
 				runTest(priv, i, hashed, Addition)
 			})

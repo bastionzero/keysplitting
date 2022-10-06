@@ -1,8 +1,8 @@
-module bastionzero.com/mpcrsa/v1/mpcrsa
+module bastionzero.com/keysplitting
 
 go 1.18
 
-replace bastionzero.com/mpcrsa/v1/mpcrsa => ./
+replace bastionzero.com/keysplitting => ./
 
 require (
 	github.com/onsi/ginkgo/v2 v2.2.0

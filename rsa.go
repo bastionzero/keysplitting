@@ -5,7 +5,7 @@
 // This code is lifted from the Go stdlib crypto/rsa. We would have preferred to use those methods directly
 // but had to remove some aspects of the Sign function that are incompatible with partial keys
 
-package mpcrsa
+package keysplitting
 
 import (
 	"crypto"
@@ -100,8 +100,6 @@ func pkcs1v15HashInfo(hash crypto.Hash, inLen int) (hashLen int, prefix []byte, 
 // decrypt performs an RSA decryption, resulting in a plaintext integer. If a
 // random source is given, RSA blinding is used. [FIXME: currently not true]
 func decrypt(random io.Reader, priv *rsa.PrivateKey, c *big.Int) (m *big.Int, err error) {
-
-	// TODO(agl): can we get away with reusing blinds?
 	if c.Cmp(priv.N) > 0 {
 		err = rsa.ErrDecryption
 		return

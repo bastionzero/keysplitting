@@ -1,11 +1,4 @@
-/*
-Package mpcrsa implements primitives for multi-party RSA signatures using Go's crypto/rsa library
-
-informed by:
-
-	[1] https://eprint.iacr.org/2001/060.pdf
-*/
-package mpcrsa
+package keysplitting
 
 import (
 	"crypto"
@@ -21,6 +14,8 @@ var (
 	bigOne  = big.NewInt(1)
 )
 
+// BIG TODO: what if the split was on d + (r * phi)
+
 // SplitBy determines the algorithm used to split the private key and combine partial signatures.
 // Either algorithm is suitable from a performance and security standpoint
 type SplitBy int
@@ -28,15 +23,6 @@ type SplitBy int
 const (
 	Multiplication SplitBy = iota
 	Addition
-
-	// TODO: this is an arbitrary number.
-	// Obviously splitting takes a litle longer with at higher values of k,
-	// but even a 100-way split can be done in less than a second.
-	//
-	// The other thing that grows is the size of the multiplicative keys,
-	// but that growth is also linear (a few hundred bytes per additional split,
-	// depending on the size of the modulus)
-	maxShards = 16
 )
 
 // SplitD returns k shards that together compose priv.D
@@ -48,10 +34,12 @@ const (
 // "Either type of split lends itself equally well to two-party based signing," [1] but they are not interoperable.
 // Whichever SplitBy method you use with SplitD, you must use the same method when running [SignNext]
 func SplitD(priv *rsa.PrivateKey, k int, splitBy SplitBy) ([]*big.Int, error) {
-	if k > maxShards || k < 2 {
-		return nil, fmt.Errorf("cannot split key into %d shards. 2 <= k <= %d", k, maxShards)
+	if k < 2 {
+		return nil, fmt.Errorf("cannot split key into fewer than 2 shards")
 	}
 
+	// because rsa.GenerateMultiPrimeKey supports an arbitrary number of primes, so do we.
+	// priv.Primes are the factors of the modulus N
 	phi := eulerTotient(priv.Primes)
 
 	switch splitBy {
@@ -64,6 +52,8 @@ func SplitD(priv *rsa.PrivateKey, k int, splitBy SplitBy) ([]*big.Int, error) {
 	}
 }
 
+// finds shards for priv.D by finding random pairs of factors whose cumulative product is congruent to priv.D (mod phi)
+//
 // note: each shard is longer than the last, at a linear rate of growth.
 // If the first shard is length 1, the second shard is length 2, the third length 3, and so on
 func splitMultiplicative(priv *rsa.PrivateKey, k int, phi *big.Int) ([]*big.Int, error) {
@@ -71,110 +61,152 @@ func splitMultiplicative(priv *rsa.PrivateKey, k int, phi *big.Int) ([]*big.Int,
 	shards := make([]*big.Int, 0)
 	seed := priv.D
 
-	// each call to randomShardsMultiplicative produces a pair of shards such that s1 * s2 ≡ seed (mod phi), where D is the original seed.
-	// If we require more than two shards, we sacrifice one of them to become the new seed.
+	// each call to splitSeed produces a pair of shards such that shardA * shardB ≡ seed (mod phi), where D is the original seed.
+	// If we require more than two shards, we sacrifice one of them to become the new seed. If a shard is being used as the next seed, it is not added to shards
 	// For a *purely visual* but not mathematically correct analogy, think of it this way: https://i.stack.imgur.com/k4h0y.png,
 	// where in the 3-shard case, we would use one 1/2 block and two 1/4 blocks
 	for len(shards) < k {
-		s1, s2, err := randomShardsMultiplicative(seed, phi)
+		shardA, shardB, err := splitSeed(seed, phi)
 		if err != nil {
 			return nil, err
 		}
-		shards = append(shards, s1)
+		shards = append(shards, shardA)
 
 		// if we only need one more shard, add the "last" s2 and exit from the loop
 		// (the break is not strictly necessary since len(shards) should now equal k)
 		if len(shards) == k-1 {
-			shards = append(shards, s2)
+			shards = append(shards, shardB)
 			break
 		}
 
 		// otherwise, use s2 as our new seed to be split
-		seed = s2
+		seed = shardB
 	}
 	return shards, nil
 }
 
-// generate two shards of seed such that s1 * s2 ≡ seed (mod phi)
-func randomShardsMultiplicative(seed *big.Int, phi *big.Int) (s1 *big.Int, s2 *big.Int, err error) {
+// generate two shards of seed such that shardA * shardB ≡ seed (mod phi)
+func splitSeed(seed *big.Int, phi *big.Int) (shardA *big.Int, shardB *big.Int, err error) {
 	success := false
 	for !success {
-		// from section 2 of the paper, pick a random integer between 1 and phi (exclusive)
-		s1, err = rand.Int(rand.Reader, phi)
+		shardA, err = validRandomNumber(phi, seed)
 		if err != nil {
 			return
 		}
 
-		if s1.Cmp(bigZero) == 0 || s1.Cmp(bigOne) == 0 {
+		// this will only succeed if shardA is coprime to phi, because otherwise,
+		// shardA has no multiplicative inverse in the ring ℤ/phiℤ
+		// however, validRandomNumber checks for coprimality with phi, so this
+		// should always succeed
+		shardAInverse := new(big.Int).ModInverse(shardA, phi)
+		if shardAInverse == nil {
 			continue
 		}
 
-		// this will only succeed if s1 is coprime to phi
-		s1i := new(big.Int).Exp(s1, big.NewInt(-1), phi)
-		if s1i == nil {
-			continue
-		}
-
-		// s2 <- d/s1 mod phi
-		s2 = new(big.Int).Mul(seed, s1i)
+		// shardB <- d/shardA mod phi
+		shardB = new(big.Int).Mul(seed, shardAInverse)
 		success = true
 	}
 
-	return s1, s2, err
+	return
 }
 
+// finds shards for priv.D by picking k random numbers whose sum is congruent to D (mod phi)
 func splitAdditive(priv *rsa.PrivateKey, k int, phi *big.Int) ([]*big.Int, error) {
-	remainingD := new(big.Int).Set(priv.D)
+	// we use this outer loop as a restart mechanism in case of an undesirable combination of shards
+ShardSearchLoop:
+	for {
+		shards := make([]*big.Int, k)
+		var newShard *big.Int
+		var err error
 
-	shards := make([]*big.Int, k)
-	var newShard *big.Int
-	var err error
+		for i := 0; i < k; i++ {
+			foundNewShard := false
+			if i == k-1 {
+				// if this is the final shard, it's time to make sure all of this adds up to D (mod phi)
+				sum := shardSum(shards)
+				switch sum.Cmp(priv.D) {
+				case -1:
+					// [sum of shards] is less than D (less likely case)
+					// set the remaining shard to D - [sum of shards]
+					newShard = new(big.Int).Sub(priv.D, sum)
+				case 1:
+					// [sum of shards] is greater than D (more likely case)
+					// set the remaining shard to phi - [sum of shards] + D
+					phiMinusSum := new(big.Int).Sub(phi, sum)
+					newShard = new(big.Int).Add(phiMinusSum, priv.D)
+				default:
+					// [sum of shards] is equal to D (astronomically unlikely)
+					// not allowed, so restart the search
+					continue ShardSearchLoop
+				}
 
-	for i := 0; i < k; i++ {
-		if i == k-1 {
-			// if this is the lat shard, give it everything that's left and stop
-			shards[i] = remainingD
-			break
-		}
+				if shardIn(shards, newShard) {
+					// our new shard is equal to an existing one (astronomically unlikely)
+					// not allowed, so restart the search
+					continue ShardSearchLoop
+				}
 
-		foundNewShard := false
-		for !foundNewShard {
-			// generate new shard slightly shorter than D
-			// For example, if D is a 2048-bit number, this will be 5 digits shorter in base 10
-			newShard, err = randomShardAdditive(priv.D, 2)
-			if err != nil {
-				return nil, err
-			}
-
-			if !shardIn(shards, newShard) {
-				// make sure it's not a duplicate of an existing shard
 				foundNewShard = true
 			}
+
+			// if this is a shard other than the last one, just pick a new random number
+			for !foundNewShard {
+				newShard, err = validRandomNumber(phi, priv.D)
+				if err != nil {
+					return nil, err
+				}
+
+				if !shardIn(shards, newShard) {
+					// make sure it's not a duplicate of an existing shard
+					foundNewShard = true
+				}
+			}
+
+			shards[i] = newShard
 		}
-		shards[i] = newShard
-		// cumulatively subtract each shard value from D
-		remainingD.Sub(remainingD, shards[i])
+
+		return shards, nil
 	}
-	return shards, nil
 }
 
-// generate a shard of seed by taking a random number of length len(x) - fewerBits
-func randomShardAdditive(seed *big.Int, fewerBytes int) (*big.Int, error) {
-	lenSeed := seed.BitLen() / 8
+// returns a random number between 1 and phi that is
+//   - coprime to phi
+//   - not equal to seed
+//
+// TODO: revisit name
+func validRandomNumber(phi *big.Int, seed *big.Int) (r *big.Int, err error) {
+	for {
+		// from section 2 of [1], pick a random integer between 1 and phi (exclusive)
+		r, err = rand.Int(rand.Reader, phi)
+		if err != nil {
+			return
+		}
 
-	lenShard := lenSeed - fewerBytes
-	// TODO: we should have a higher floor on this
-	if lenShard <= 0 {
-		return nil, fmt.Errorf("cannot create shard of length %d: minimum length is 1", lenShard)
+		// from section 3.1 of [2], check that r is coprime to phi
+		gcd := new(big.Int).GCD(nil, nil, r, phi)
+		if gcd.Cmp(bigOne) != 0 {
+			continue
+		}
+
+		// check that r is not equal to 0, 1, or seed
+		if r.Cmp(bigZero) == 0 || r.Cmp(bigOne) == 0 || r.Cmp(seed) == 0 {
+			continue
+		}
+
+		return
 	}
+}
 
-	b := make([]byte, lenShard)
-	_, err := rand.Read(b)
-	if err != nil {
-		return nil, fmt.Errorf("failed to produce random number: %s", err)
+// returns the sum of a slice of shards (nil shards count as 0)
+func shardSum(shards []*big.Int) *big.Int {
+	result := big.NewInt(0)
+	for _, s := range shards {
+		if s != nil {
+			result.Add(result, s)
+		}
 	}
-
-	return new(big.Int).SetBytes(b), nil
+	return result
 }
 
 func shardIn(shards []*big.Int, shard *big.Int) bool {

@@ -1,4 +1,4 @@
-package mpcrsa
+package keysplitting
 
 import (
 	"math/big"
@@ -12,7 +12,7 @@ func congruentModN(a *big.Int, b *big.Int, N *big.Int) bool {
 	return aModN.Cmp(bModN) == 0
 }
 
-// calculate the Euler totient of n using its prime factors
+// calculate the Euler totient of n using its prime factors, however many there are
 func eulerTotient(primes []*big.Int) *big.Int {
 	// multiply the first two primes (guaranteed to be at least 2)
 	// phi <- (p[0] - 1) * (p[1] - 1)

@@ -1,4 +1,4 @@
-package mpcrsa
+package keysplitting
 
 import (
 	"math/big"
@@ -7,7 +7,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("MpcRsa congruence", func() {
+var _ = Describe("Keysplitting congruence", func() {
 	Context("Small numbers", func() {
 		two := big.NewInt(2)
 		seven := big.NewInt(7)
@@ -38,7 +38,7 @@ var _ = Describe("MpcRsa congruence", func() {
 	})
 })
 
-var _ = Describe("MpcRsa Euler totient", func() {
+var _ = Describe("Keysplitting Euler totient", func() {
 	Context("Small numbers", func() {
 		It("Correctly gives phi(77837) == 77280", func() {
 			// let p = 277 and q = 281. Then n = 77837
