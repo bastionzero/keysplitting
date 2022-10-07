@@ -60,7 +60,8 @@ possessing a shard. However, if no such broker exists, the signing parties can s
 
 # Sources
 
-	[1] https://eprint.iacr.org/2001/060.pdf
+		[1] https://eprint.iacr.org/2001/060.pdf
+	  [2] https://crypto.stanford.edu/semmail/mrsa.pdf
 */
 package keysplitting
 
