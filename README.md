@@ -1,5 +1,5 @@
 # keysplitting
-Wrapper around Go's RSA library supporting multi-party signatures
+Wrapper around Go's RSA library supporting multi-party signatures and decryption
 
 ## Note
 
