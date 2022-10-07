@@ -1,8 +1,8 @@
-module bastionzero.com/keysplitting
+module github.com/bastionzero/keysplitting
 
 go 1.18
 
-replace bastionzero.com/keysplitting => ./
+replace github.com/bastionzero/keysplitting => ./
 
 require (
 	github.com/onsi/ginkgo/v2 v2.2.0

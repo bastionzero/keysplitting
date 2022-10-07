@@ -12,7 +12,7 @@ import (
 	"runtime"
 	"time"
 
-	"bastionzero.com/keysplitting"
+	"github.com/bastionzero/keysplitting"
 )
 
 // source: https://scene-si.org/2018/08/06/basic-monitoring-of-go-apps-with-the-runtime-package/
@@ -63,6 +63,7 @@ func NewMonitor(duration int) {
 }
 
 func runMetrics() {
+	fmt.Println("Running metrics script -- a continuous random workflow to sanity check memory usage and other statistics")
 	msg := "test message"
 	hasher := sha512.New()
 	hasher.Write([]byte(msg))
