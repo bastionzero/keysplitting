@@ -76,6 +76,9 @@ func runTest(priv *rsa.PrivateKey, i int, hashed []byte, splitBy SplitBy) {
 		// simulate each party iteratively adding their signature
 		sigNext := sig1
 		for k := 1; k < len(shards); k++ {
+			// no partial signatures should verify
+			Expect(rsa.VerifyPKCS1v15(&priv.PublicKey, crypto.SHA512, hashed, sigNext)).NotTo(Succeed(), "partial signature must not verify")
+
 			sigNext, err = SignNext(rand.Reader, shards[k], crypto.SHA512, hashed, &priv.PublicKey, splitBy, sigNext)
 			Expect(err).To(BeNil(), fmt.Sprintf("failed to generate signature #%d: %s", k, err))
 		}

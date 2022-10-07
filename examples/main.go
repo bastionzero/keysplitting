@@ -2,7 +2,7 @@
 to run these scripts, do:
 
 go build .
-./examples script1 script2 ...
+./examples script...
 */
 package main
 
@@ -11,7 +11,10 @@ import (
 )
 
 const (
-	metrics = "metrics"
+	metrics            = "metrics"
+	multiplicative     = "multiplicative"
+	additiveSequential = "additive-sequential"
+	additiveBrokered   = "additive-brokered"
 )
 
 func main() {
@@ -21,6 +24,12 @@ func main() {
 		switch script {
 		case metrics:
 			runMetrics()
+		case multiplicative:
+			runMultiplicative()
+		case additiveSequential:
+			runAdditiveSequential()
+		case additiveBrokered:
+			runAdditiveBrokered()
 		}
 	}
 }
