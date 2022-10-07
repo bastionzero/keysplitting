@@ -1,5 +1,5 @@
 /*
-Package keysplitting implements primitives for multi-party RSA signatures using Go's crypto/rsa library
+Package keysplitting implements primitives for multi-party RSA signatures and decryption using Go's crypto/rsa library
 
 # Overview
 
