@@ -1,9 +1,5 @@
-// Copyright 2009 The Go Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
-//
-// This code is lifted from the Go stdlib crypto/rsa. We would have preferred to use those methods directly
-// but had to remove some aspects of the Sign function that are incompatible with partial keys
+// PLEASE NOTE: this is not a homegrown cryptographic implementation. This code is lifted from the Go stdlib crypto/rsa.
+// We would have preferred to use those methods directly, but had to remove some aspects of the Sign function that are incompatible with partial keys.
 
 package keysplitting
 
@@ -97,8 +93,7 @@ func pkcs1v15HashInfo(hash crypto.Hash, inLen int) (hashLen int, prefix []byte, 
 	return
 }
 
-// decrypt performs an RSA decryption, resulting in a plaintext integer. If a
-// random source is given, RSA blinding is used. [FIXME: currently not true]
+// decrypt performs an RSA decryption, resulting in a plaintext integer.
 func decrypt(random io.Reader, priv *rsa.PrivateKey, c *big.Int) (m *big.Int, err error) {
 	if c.Cmp(priv.N) > 0 {
 		err = rsa.ErrDecryption
@@ -109,9 +104,8 @@ func decrypt(random io.Reader, priv *rsa.PrivateKey, c *big.Int) (m *big.Int, er
 	}
 
 	/*****************************************************************************************************
-	 *	FIXME: we probably need some form of blinding here, but for now it doesn't work with split keys, *
-	 *	probably because the D/E relationship does not hold for shards. Still, there are other ways of   *
-	 *	defending against side-channel attacks                                                           *
+	 *	We may want some form of blinding here, but for now it doesn't work with split keys, because the *
+	 *  inverse relationship between D and E does not hold for shards.                                   *
 	 *****************************************************************************************************/
 
 	m = new(big.Int).Exp(c, priv.D, priv.N)

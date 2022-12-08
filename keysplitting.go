@@ -14,7 +14,13 @@ var (
 	bigOne  = big.NewInt(1)
 )
 
-// BIG TODO: what if the split was on d + (r * phi)
+// TODO: considering modifying the additive split to d + (r * phi)
+
+type SplitPrivateKey struct {
+	PublicKey *rsa.PublicKey // public part
+	D         *big.Int       // split private exponent
+	// someday could have "E minor," the split public exponent
+}
 
 // SplitBy determines the algorithm used to split the private key and combine partial signatures.
 // Either algorithm is suitable from a performance and security standpoint
@@ -25,7 +31,7 @@ const (
 	Addition
 )
 
-// SplitD returns k shards that together compose priv.D
+// SplitD returns k private key shards that together compose priv.D
 //
 // If [SplitBy].Multiplication is used, the shards will be such that s1 * s2 * ... * sk ≡ D (mod phi(N))
 //
@@ -33,7 +39,7 @@ const (
 //
 // "Either type of split lends itself equally well to two-party based signing," [1] but they are not interoperable.
 // Whichever SplitBy method you use with SplitD, you must use the same method when running [SignNext]
-func SplitD(priv *rsa.PrivateKey, k int, splitBy SplitBy) ([]*big.Int, error) {
+func SplitD(priv *rsa.PrivateKey, k int, splitBy SplitBy) ([]*SplitPrivateKey, error) {
 	if k < 2 {
 		return nil, fmt.Errorf("cannot split key into fewer than 2 shards")
 	}
@@ -56,9 +62,9 @@ func SplitD(priv *rsa.PrivateKey, k int, splitBy SplitBy) ([]*big.Int, error) {
 //
 // note: each shard is longer than the last, at a linear rate of growth.
 // If the first shard is length 1, the second shard is length 2, the third length 3, and so on
-func splitMultiplicative(priv *rsa.PrivateKey, k int, phi *big.Int) ([]*big.Int, error) {
+func splitMultiplicative(priv *rsa.PrivateKey, k int, phi *big.Int) ([]*SplitPrivateKey, error) {
 
-	shards := make([]*big.Int, 0)
+	shards := make([]*SplitPrivateKey, 0)
 	seed := priv.D
 
 	// each call to splitSeed produces a pair of shards such that shardA * shardB ≡ seed (mod phi), where D is the original seed.
@@ -70,12 +76,18 @@ func splitMultiplicative(priv *rsa.PrivateKey, k int, phi *big.Int) ([]*big.Int,
 		if err != nil {
 			return nil, err
 		}
-		shards = append(shards, shardA)
+		shards = append(shards, &SplitPrivateKey{
+			PublicKey: &priv.PublicKey,
+			D:         shardA,
+		})
 
 		// if we only need one more shard, add the "last" s2 and exit from the loop
 		// (the break is not strictly necessary since len(shards) should now equal k)
 		if len(shards) == k-1 {
-			shards = append(shards, shardB)
+			shards = append(shards, &SplitPrivateKey{
+				PublicKey: &priv.PublicKey,
+				D:         shardB,
+			})
 			break
 		}
 
@@ -103,7 +115,7 @@ func splitSeed(seed *big.Int, phi *big.Int) (shardA *big.Int, shardB *big.Int, e
 			continue
 		}
 
-		// shardB <- d/shardA mod phi
+		// shardB <- seed/shardA mod phi
 		shardB = new(big.Int).Mul(seed, shardAInverse)
 		success = true
 	}
@@ -112,16 +124,17 @@ func splitSeed(seed *big.Int, phi *big.Int) (shardA *big.Int, shardB *big.Int, e
 }
 
 // finds shards for priv.D by picking k random numbers whose sum is congruent to D (mod phi)
-func splitAdditive(priv *rsa.PrivateKey, k int, phi *big.Int) ([]*big.Int, error) {
+func splitAdditive(priv *rsa.PrivateKey, k int, phi *big.Int) ([]*SplitPrivateKey, error) {
 	// we use this outer loop as a restart mechanism in case of an undesirable combination of shards
 ShardSearchLoop:
 	for {
-		shards := make([]*big.Int, k)
-		var newShard *big.Int
+		shards := make([]*SplitPrivateKey, k)
 		var err error
 
 		for i := 0; i < k; i++ {
+			newShard := &SplitPrivateKey{PublicKey: &priv.PublicKey}
 			foundNewShard := false
+
 			if i == k-1 {
 				// if this is the final shard, it's time to make sure all of this adds up to D (mod phi)
 				sum := shardSum(shards)
@@ -129,12 +142,12 @@ ShardSearchLoop:
 				case -1:
 					// [sum of shards] is less than D (less likely case)
 					// set the remaining shard to D - [sum of shards]
-					newShard = new(big.Int).Sub(priv.D, sum)
+					newShard.D = new(big.Int).Sub(priv.D, sum)
 				case 1:
 					// [sum of shards] is greater than D (more likely case)
 					// set the remaining shard to phi - [sum of shards] + D
 					phiMinusSum := new(big.Int).Sub(phi, sum)
-					newShard = new(big.Int).Add(phiMinusSum, priv.D)
+					newShard.D = new(big.Int).Add(phiMinusSum, priv.D)
 				default:
 					// [sum of shards] is equal to D (astronomically unlikely)
 					// not allowed, so restart the search
@@ -152,7 +165,7 @@ ShardSearchLoop:
 
 			// if this is a shard other than the last one, just pick a new random number
 			for !foundNewShard {
-				newShard, err = validRandomNumber(phi, priv.D)
+				newShard.D, err = validRandomNumber(phi, priv.D)
 				if err != nil {
 					return nil, err
 				}
@@ -199,19 +212,19 @@ func validRandomNumber(phi *big.Int, seed *big.Int) (r *big.Int, err error) {
 }
 
 // returns the sum of a slice of shards (nil shards count as 0)
-func shardSum(shards []*big.Int) *big.Int {
+func shardSum(shards []*SplitPrivateKey) *big.Int {
 	result := big.NewInt(0)
 	for _, s := range shards {
 		if s != nil {
-			result.Add(result, s)
+			result.Add(result, s.D)
 		}
 	}
 	return result
 }
 
-func shardIn(shards []*big.Int, shard *big.Int) bool {
+func shardIn(shards []*SplitPrivateKey, shard *SplitPrivateKey) bool {
 	for _, s := range shards {
-		if s != nil && s.Cmp(shard) == 0 {
+		if s != nil && s.D != nil && s.D.Cmp(shard.D) == 0 {
 			return true
 		}
 	}
@@ -220,10 +233,10 @@ func shardIn(shards []*big.Int, shard *big.Int) bool {
 
 // SignFirst uses the given key shard to perform the initial signature on a hashed message.
 // Note that hashed must be the result of hashing the input message using the given hash function
-func SignFirst(random io.Reader, shard *big.Int, hashFn crypto.Hash, hashed []byte, pub *rsa.PublicKey) ([]byte, error) {
+func SignFirst(random io.Reader, shard *SplitPrivateKey, hashFn crypto.Hash, hashed []byte) ([]byte, error) {
 	priv := &rsa.PrivateKey{
-		PublicKey: *pub,
-		D:         shard,
+		PublicKey: *shard.PublicKey,
+		D:         shard.D,
 	}
 	// TODO: revisit name
 	return signPKCS1v15(random, priv, hashFn, hashed)
@@ -236,26 +249,26 @@ func SignFirst(random io.Reader, shard *big.Int, hashFn crypto.Hash, hashed []by
 // If [SplitBy].Addition is used, nextSig(H) <- partialSig(H) * H^shard (mod N), i.e. a chain of multiplication
 //
 // Note that hashed must be the result of hashing the input message using the given hash function.
-func SignNext(random io.Reader, shard *big.Int, hashFn crypto.Hash, hashed []byte, pub *rsa.PublicKey, splitBy SplitBy, partialSig []byte) ([]byte, error) {
+func SignNext(random io.Reader, shard *SplitPrivateKey, hashFn crypto.Hash, hashed []byte, splitBy SplitBy, partialSig []byte) ([]byte, error) {
 	partialInt := new(big.Int).SetBytes(partialSig)
 
 	switch splitBy {
 	case Multiplication:
-		nextSig := new(big.Int).Exp(partialInt, shard, pub.N)
+		nextSig := new(big.Int).Exp(partialInt, shard.D, shard.PublicKey.N)
 		if nextSig == nil {
 			return nil, fmt.Errorf("failed to add next signature with the given shard, public key, and partial signature")
 		}
 
 		return nextSig.Bytes(), nil
 	case Addition:
-		nextBaseSig, err := SignFirst(random, shard, hashFn, hashed, pub)
+		nextBaseSig, err := SignFirst(random, shard, hashFn, hashed)
 		if err != nil {
 			return nil, err
 		}
 
 		nextBaseInt := new(big.Int).SetBytes(nextBaseSig)
 		nextSig := new(big.Int).Mul(nextBaseInt, partialInt)
-		nextSig.Mod(nextSig, pub.N)
+		nextSig.Mod(nextSig, shard.PublicKey.N)
 		return nextSig.Bytes(), nil
 	default:
 		return nil, fmt.Errorf("unrecognized splitBy argument: %v", splitBy)

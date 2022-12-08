@@ -18,7 +18,7 @@ import (
 const maxTestShards = 16
 
 // randomize order of shards
-func shuffleShards(shards []*big.Int) {
+func shuffleShards(shards []*SplitPrivateKey) {
 	mrand.Seed(int64(time.Now().UnixMicro()))
 	for i := range shards {
 		j := mrand.Intn(i + 1)
@@ -26,17 +26,17 @@ func shuffleShards(shards []*big.Int) {
 	}
 }
 
-func shardProduct(shards []*big.Int) *big.Int {
+func shardProduct(shards []*SplitPrivateKey) *big.Int {
 	result := big.NewInt(1)
 	for _, s := range shards {
-		result.Mul(result, s)
+		result.Mul(result, s.D)
 	}
 	return result
 }
 
 // run a full workflow of splitting a key and using the shards to sign a message
 func runTest(priv *rsa.PrivateKey, i int, hashed []byte, splitBy SplitBy) {
-	var shards []*big.Int
+	var shards []*SplitPrivateKey
 	var err error
 
 	var label string
@@ -70,7 +70,7 @@ func runTest(priv *rsa.PrivateKey, i int, hashed []byte, splitBy SplitBy) {
 		shuffleShards(shards)
 
 		// although the overall order doesn't matter, someone has to make the first signature
-		sig1, err := SignFirst(rand.Reader, shards[0], crypto.SHA512, hashed, &priv.PublicKey)
+		sig1, err := SignFirst(rand.Reader, shards[0], crypto.SHA512, hashed)
 		Expect(err).To(BeNil(), fmt.Sprintf("failed to generate first signature: %s", err))
 
 		// simulate each party iteratively adding their signature
@@ -79,7 +79,7 @@ func runTest(priv *rsa.PrivateKey, i int, hashed []byte, splitBy SplitBy) {
 			// no partial signatures should verify
 			Expect(rsa.VerifyPKCS1v15(&priv.PublicKey, crypto.SHA512, hashed, sigNext)).NotTo(Succeed(), "partial signature must not verify")
 
-			sigNext, err = SignNext(rand.Reader, shards[k], crypto.SHA512, hashed, &priv.PublicKey, splitBy, sigNext)
+			sigNext, err = SignNext(rand.Reader, shards[k], crypto.SHA512, hashed, splitBy, sigNext)
 			Expect(err).To(BeNil(), fmt.Sprintf("failed to generate signature #%d: %s", k, err))
 		}
 
