@@ -30,8 +30,6 @@ func runMultiplicative() {
 	shard1 := shards[1]
 	shard2 := shards[2]
 
-	fmt.Println("\n\n%s", shards[1].Bytes())
-
 	shards = nil
 
 	/*
