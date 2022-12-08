@@ -37,7 +37,7 @@ func runAdditiveSequential() {
 	 * The first signing party signs the message and sends the partially-signed message to the next party in the clear.
 	 * The original message must be sent as well.
 	 */
-	sig1, err := keysplitting.SignFirst(rand.Reader, shard0, crypto.SHA512, hashed, &key.PublicKey)
+	sig1, err := keysplitting.SignFirst(rand.Reader, shard0, crypto.SHA512, hashed)
 	if err != nil {
 		panic(err)
 	}
@@ -45,7 +45,7 @@ func runAdditiveSequential() {
 	/*
 	 * Upon receiving sig1 and the message, the second party adds their signature and sends it to the third party
 	 */
-	sig2, err := keysplitting.SignNext(rand.Reader, shard1, crypto.SHA512, hashed, &key.PublicKey, keysplitting.Addition, sig1)
+	sig2, err := keysplitting.SignNext(rand.Reader, shard1, crypto.SHA512, hashed, keysplitting.Addition, sig1)
 	if err != nil {
 		panic(err)
 	}
@@ -53,7 +53,7 @@ func runAdditiveSequential() {
 	/*
 	 * Upon receiving sig2 and the message, the third party adds their signature. Only this signature will verify
 	 */
-	sig3, err := keysplitting.SignNext(rand.Reader, shard2, crypto.SHA512, hashed, &key.PublicKey, keysplitting.Addition, sig2)
+	sig3, err := keysplitting.SignNext(rand.Reader, shard2, crypto.SHA512, hashed, keysplitting.Addition, sig2)
 	if err != nil {
 		panic(err)
 	}

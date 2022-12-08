@@ -81,7 +81,7 @@ func runMetrics() {
 		}
 
 		// although the overall order doesn't matter, someone has to make the first signature
-		sig1, err := keysplitting.SignFirst(rand.Reader, shards[0], crypto.SHA512, hashed, &key.PublicKey)
+		sig1, err := keysplitting.SignFirst(rand.Reader, shards[0], crypto.SHA512, hashed)
 		if err != nil {
 			panic(err)
 		}
@@ -89,7 +89,7 @@ func runMetrics() {
 		// simulate each party iteratively adding their signature
 		sigNext := sig1
 		for k := 1; k < len(shards); k++ {
-			sigNext, err = keysplitting.SignNext(rand.Reader, shards[k], crypto.SHA512, hashed, &key.PublicKey, keysplitting.Addition, sigNext)
+			sigNext, err = keysplitting.SignNext(rand.Reader, shards[k], crypto.SHA512, hashed, keysplitting.Addition, sigNext)
 			if err != nil {
 				panic(err)
 			}
