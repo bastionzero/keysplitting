@@ -35,17 +35,17 @@ func runAdditiveBrokered() {
 	/*
 	 * In this model, all parties sign in parallel, then send their partial signatures to a central broker for verification.
 	 */
-	sig1, err := keysplitting.SignFirst(rand.Reader, shard0, crypto.SHA512, hashed, &key.PublicKey)
+	sig1, err := keysplitting.SignFirst(rand.Reader, shard0, crypto.SHA512, hashed)
 	if err != nil {
 		panic(err)
 	}
 
-	sig2, err := keysplitting.SignFirst(rand.Reader, shard1, crypto.SHA512, hashed, &key.PublicKey)
+	sig2, err := keysplitting.SignFirst(rand.Reader, shard1, crypto.SHA512, hashed)
 	if err != nil {
 		panic(err)
 	}
 
-	sig3, err := keysplitting.SignFirst(rand.Reader, shard2, crypto.SHA512, hashed, &key.PublicKey)
+	sig3, err := keysplitting.SignFirst(rand.Reader, shard2, crypto.SHA512, hashed)
 	if err != nil {
 		panic(err)
 	}
