@@ -16,6 +16,7 @@ var (
 
 // TODO: considering modifying the additive split to d + (r * phi)
 
+// A SplitPrivateKey represents an RSA key shard. The public key matches that of the original key
 type SplitPrivateKey struct {
 	PublicKey *rsa.PublicKey // public part
 	D         *big.Int       // split private exponent
