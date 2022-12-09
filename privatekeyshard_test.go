@@ -79,7 +79,7 @@ func expectKeysToMatch(k1 *PrivateKeyShard, k2 *PrivateKeyShard) {
 	Expect(k1.PublicKey.E).To(Equal(k2.PublicKey.E), "public exponents do not match")
 }
 
-var _ = Describe("SplitPrivateKey", func() {
+var _ = Describe("PrivateKeyShard", func() {
 	Context("PEM encoding", func() {
 		When("Bidirectional encode/decode", func() {
 			key, _ := rsa.GenerateKey(rand.Reader, 4096)
