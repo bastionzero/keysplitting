@@ -15,9 +15,12 @@ var (
 )
 
 // TODO: considering modifying the additive split to d + (r * phi)
+// FIXME: verify that n additive shards do not have some kind of recurring pattern...
 
 // SplitBy determines the algorithm used to split the private key and combine partial signatures.
 // Either algorithm is suitable from a performance and security standpoint
+// TODO: probably should be a string now
+// TODO: oh, *really* needs to be a string because the int looks like the number of splits
 type SplitBy int
 
 const (
@@ -30,9 +33,6 @@ const (
 // If [SplitBy].Multiplication is used, the shards will be such that s1 * s2 * ... * sk ≡ D (mod phi(N))
 //
 // If [SplitBy].Addition is used, the shards will be such that s1 + s2 + ... + sk ≡ D (mod phi(N))
-//
-// "Either type of split lends itself equally well to two-party based signing," [1] but they are not interoperable.
-// Whichever SplitBy method you use with SplitD, you must use the same method when running [SignNext]
 func SplitD(priv *rsa.PrivateKey, k int, splitBy SplitBy) ([]*PrivateKeyShard, error) {
 	if k < 2 {
 		return nil, fmt.Errorf("cannot split key into fewer than 2 shards")
@@ -73,6 +73,7 @@ func splitMultiplicative(priv *rsa.PrivateKey, k int, phi *big.Int) ([]*PrivateK
 		shards = append(shards, &PrivateKeyShard{
 			PublicKey: &priv.PublicKey,
 			D:         shardA,
+			SplitBy:   Multiplication,
 		})
 
 		// if we only need one more shard, add the "last" s2 and exit from the loop
@@ -81,6 +82,7 @@ func splitMultiplicative(priv *rsa.PrivateKey, k int, phi *big.Int) ([]*PrivateK
 			shards = append(shards, &PrivateKeyShard{
 				PublicKey: &priv.PublicKey,
 				D:         shardB,
+				SplitBy:   Multiplication,
 			})
 			break
 		}
@@ -126,7 +128,7 @@ ShardSearchLoop:
 		var err error
 
 		for i := 0; i < k; i++ {
-			newShard := &PrivateKeyShard{PublicKey: &priv.PublicKey}
+			newShard := &PrivateKeyShard{PublicKey: &priv.PublicKey, SplitBy: Addition}
 			foundNewShard := false
 
 			if i == k-1 {
@@ -236,15 +238,15 @@ func SignFirst(random io.Reader, shard *PrivateKeyShard, hashFn crypto.Hash, has
 
 // SignNext uses the given key shard to sign a partially-signed message
 //
-// If [SplitBy].Multiplication is used, nextSig(H) <- partialSig(H)^shard (mod N), i.e. a chain of exponentiation
+// If the original key was split multiplicatively, nextSig(H) <- partialSig(H)^shard (mod N), i.e. a chain of exponentiation
 //
-// If [SplitBy].Addition is used, nextSig(H) <- partialSig(H) * H^shard (mod N), i.e. a chain of multiplication
+// If the original key was split additively, nextSig(H) <- partialSig(H) * H^shard (mod N), i.e. a chain of multiplication
 //
 // Note that hashed must be the result of hashing the input message using the given hash function.
-func SignNext(random io.Reader, shard *PrivateKeyShard, hashFn crypto.Hash, hashed []byte, splitBy SplitBy, partialSig []byte) ([]byte, error) {
+func SignNext(random io.Reader, shard *PrivateKeyShard, hashFn crypto.Hash, hashed []byte, partialSig []byte) ([]byte, error) {
 	partialInt := new(big.Int).SetBytes(partialSig)
 
-	switch splitBy {
+	switch shard.SplitBy {
 	case Multiplication:
 		nextSig := new(big.Int).Exp(partialInt, shard.D, shard.PublicKey.N)
 		if nextSig == nil {
@@ -263,6 +265,6 @@ func SignNext(random io.Reader, shard *PrivateKeyShard, hashFn crypto.Hash, hash
 		nextSig.Mod(nextSig, shard.PublicKey.N)
 		return nextSig.Bytes(), nil
 	default:
-		return nil, fmt.Errorf("unrecognized splitBy argument: %v", splitBy)
+		return nil, fmt.Errorf("unrecognized split algorithm: %v", shard.SplitBy)
 	}
 }

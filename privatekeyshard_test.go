@@ -3,6 +3,7 @@ package keysplitting
 import (
 	"crypto/rand"
 	"crypto/rsa"
+	"fmt"
 	"math/big"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -77,6 +78,7 @@ func expectKeysToMatch(k1 *PrivateKeyShard, k2 *PrivateKeyShard) {
 	Expect(k1.D.String()).To(Equal(k2.D.String()), "split private exponents do not match")
 	Expect(k1.PublicKey.N.String()).To(Equal(k2.PublicKey.N.String()), "moduli do not match")
 	Expect(k1.PublicKey.E).To(Equal(k2.PublicKey.E), "public exponents do not match")
+	Expect(k1.SplitBy).To(Equal(k2.SplitBy), "splitBy algorithms do not match")
 }
 
 var _ = Describe("SplitPrivateKey", func() {
@@ -106,7 +108,7 @@ var _ = Describe("SplitPrivateKey", func() {
 				pemEncoded, err := mockStructPks.EncodePEM()
 				Expect(err).To(BeNil())
 
-				By("Matching all key properties")
+				By(fmt.Sprintf("Matching encoding of %s", mockPemEncodedPks))
 				Expect(pemEncoded).To(Equal(mockPemEncodedPks))
 			})
 		})
@@ -117,7 +119,7 @@ var _ = Describe("SplitPrivateKey", func() {
 				testShard, err := DecodePEM(mockPemEncodedPks)
 				Expect(err).To(BeNil())
 
-				By("Matching all key properties")
+				By("Matching all key properties of %s")
 				expectKeysToMatch(testShard, mockStructPks)
 			})
 		})

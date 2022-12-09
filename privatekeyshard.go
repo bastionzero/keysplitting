@@ -15,7 +15,9 @@ const pemType = "RSA SPLIT PRIVATE KEY"
 type PrivateKeyShard struct {
 	PublicKey *rsa.PublicKey // public part
 	D         *big.Int       // split private exponent
+	SplitBy   SplitBy        // the algorithm used to split the original key
 	// someday could have "E minor," the split public exponent
+
 }
 
 // used exclusively as a placeholder for encoding-decoding
@@ -28,10 +30,10 @@ type publicKey struct {
 type privateKeyShard struct {
 	PublicKey publicKey
 	D         []byte
+	SplitBy   SplitBy
 }
 
 // returns a PEM encoding of the key data
-// TODO: should the string include the split algorithm?
 func (pks *PrivateKeyShard) EncodePEM() (string, error) {
 	// we perform this conversion because asn1.Marshal cannot handle pointer values or unexported fields
 	b, err := asn1.Marshal(privateKeyShard{
@@ -39,7 +41,8 @@ func (pks *PrivateKeyShard) EncodePEM() (string, error) {
 			N: pks.PublicKey.N.Bytes(),
 			E: pks.PublicKey.E,
 		},
-		D: pks.D.Bytes(),
+		D:       pks.D.Bytes(),
+		SplitBy: pks.SplitBy,
 	})
 
 	if err != nil {
@@ -76,6 +79,7 @@ func DecodePEM(encodedPks string) (*PrivateKeyShard, error) {
 			N: new(big.Int).SetBytes(pks.PublicKey.N),
 			E: pks.PublicKey.E,
 		},
-		D: new(big.Int).SetBytes(pks.D),
+		D:       new(big.Int).SetBytes(pks.D),
+		SplitBy: pks.SplitBy,
 	}, err
 }
