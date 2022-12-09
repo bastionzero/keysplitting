@@ -106,7 +106,7 @@ var _ = Describe("SplitPrivateKey", func() {
 				pemEncoded, err := mockStructPks.EncodePEM()
 				Expect(err).To(BeNil())
 
-				By("Matching all key properties")
+				By("Matching encoding")
 				Expect(pemEncoded).To(Equal(mockPemEncodedPks))
 			})
 		})
