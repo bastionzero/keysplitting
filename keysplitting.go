@@ -15,17 +15,14 @@ var (
 )
 
 // TODO: considering modifying the additive split to d + (r * phi)
-// FIXME: verify that n additive shards do not have some kind of recurring pattern...
 
 // SplitBy determines the algorithm used to split the private key and combine partial signatures.
 // Either algorithm is suitable from a performance and security standpoint
-// TODO: probably should be a string now
-// TODO: oh, *really* needs to be a string because the int looks like the number of splits
-type SplitBy int
+type SplitBy string
 
 const (
-	Multiplication SplitBy = iota
-	Addition
+	Multiplication SplitBy = "Multiplication"
+	Addition       SplitBy = "Addition"
 )
 
 // SplitD returns k private key shards that together compose priv.D
