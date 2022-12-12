@@ -89,7 +89,7 @@ func runMetrics() {
 		// simulate each party iteratively adding their signature
 		sigNext := sig1
 		for k := 1; k < len(shards); k++ {
-			sigNext, err = keysplitting.SignNext(rand.Reader, shards[k], crypto.SHA512, hashed, keysplitting.Addition, sigNext)
+			sigNext, err = keysplitting.SignNext(rand.Reader, shards[k], crypto.SHA512, hashed, sigNext)
 			if err != nil {
 				panic(err)
 			}
