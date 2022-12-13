@@ -45,7 +45,7 @@ func runMultiplicative() {
 	/*
 	 * Upon receiving sig1, the second party adds their signature and sends it to the third party
 	 */
-	sig2, err := keysplitting.SignNext(rand.Reader, shard1, crypto.SHA512, nil, keysplitting.Multiplication, sig1)
+	sig2, err := keysplitting.SignNext(rand.Reader, shard1, crypto.SHA512, nil, sig1)
 	if err != nil {
 		panic(err)
 	}
@@ -53,7 +53,7 @@ func runMultiplicative() {
 	/*
 	 * Upon receiving sig2, the third party adds their signature. Only this signature will verify
 	 */
-	sig3, err := keysplitting.SignNext(rand.Reader, shard2, crypto.SHA512, nil, keysplitting.Multiplication, sig2)
+	sig3, err := keysplitting.SignNext(rand.Reader, shard2, crypto.SHA512, nil, sig2)
 	if err != nil {
 		panic(err)
 	}
